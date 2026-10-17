@@ -25,8 +25,8 @@ export function ReplyForm({
 }) {
   const prefix = editor.messageId ? "edit" : "reply";
   return (
-    <form className="space-y-4" onSubmit={onSubmit}>
-      <fieldset disabled={disabled || saving} className="contents">
+    <form onSubmit={onSubmit}>
+      <fieldset disabled={disabled || saving} className="m-0 grid min-w-0 gap-4 border-0 p-0">
         <div className="space-y-1.5">
           <label htmlFor={`${prefix}-content`} className="sr-only">
             Сообщение

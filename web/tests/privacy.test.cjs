@@ -257,6 +257,8 @@ test("discards delayed data from the previous conversation", async () =>
 
 test("split components retain create, edit, reschedule and delete wiring", async () =>
   harness(async (h) => {
+    assert.match(h.view.root.findByType("fieldset").props.className, /\bgrid\b/);
+    assert.match(h.view.root.findByType("fieldset").props.className, /\bgap-4\b/);
     let messages = [row];
     h.setResponder(async (_url, init) => {
       if (init.method === "PUT") messages = [{ ...row, ...JSON.parse(init.body) }];
@@ -273,6 +275,7 @@ test("split components retain create, edit, reschedule and delete wiring", async
     assert.equal(JSON.parse(h.requests.find(r => r.init.method === "POST").init.body).content, "NEW_REPLY");
     assert.equal(h.view.root.findByType("textarea").props.value, "");
     await act(async () => h.view.root.find(node => node.props.role === "button").props.onClick());
+    assert.ok(h.view.root.findAllByType("fieldset").every(node => node.props.className.includes("gap-4")));
     await act(async () => {
       h.view.root.findAllByType("textarea")[1].props.onChange({ target: { value: "UPDATED_REPLY" } });
     });
