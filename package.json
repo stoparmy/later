@@ -1,0 +1,17 @@
+{
+  "name": "later-release-tools",
+  "private": true,
+  "scripts": {
+    "check:publication": "node scripts/check-publication.mjs",
+    "release": "semantic-release",
+    "test": "npm --prefix server test && npm --prefix web test",
+    "build": "npm --prefix server run build && npm --prefix web run build"
+  },
+  "devDependencies": {
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^11.0.6",
+    "@semantic-release/release-notes-generator": "^14.1.0",
+    "semantic-release": "^25.0.9"
+  }
+}

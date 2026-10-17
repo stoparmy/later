@@ -1,0 +1,27 @@
+{
+  "name": "stoparmy-later-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "worker": "node dist/worker/index.js",
+    "migrate": "node dist/db/migrate.js",
+    "test": "npm run build && node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "cookie": "^1.0.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/cookie": "^0.6.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.3.0",
+    "@types/pg": "^8.15.5",
+    "typescript": "^5.9.2"
+  }
+}

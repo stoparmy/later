@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: later
+      POSTGRES_USER: later
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - later-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U later -d later"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  later:
+    build:
+      context: .
+      args:
+        LATER_PUBLIC_BASE_PATH: ${LATER_PUBLIC_BASE_PATH:-./}
+    environment: &later-environment
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://later:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/later
+      CHATWOOT_BASE_URL: ${CHATWOOT_BASE_URL}
+      CHATWOOT_APP_TOKEN: ${CHATWOOT_APP_TOKEN}
+      LATER_WORKER_POLL_INTERVAL_MS: ${LATER_WORKER_POLL_INTERVAL_MS:-5000}
+      LATER_WORKER_LEASE_MS: ${LATER_WORKER_LEASE_MS:-60000}
+      LATER_WORKER_MAX_ATTEMPTS: ${LATER_WORKER_MAX_ATTEMPTS:-5}
+      LATER_CHATWOOT_REQUEST_TIMEOUT_MS: ${LATER_CHATWOOT_REQUEST_TIMEOUT_MS:-15000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      args:
+        LATER_PUBLIC_BASE_PATH: ${LATER_PUBLIC_BASE_PATH:-./}
+    command: ["node", "dist/worker/index.js"]
+    environment: *later-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  later-postgres:
