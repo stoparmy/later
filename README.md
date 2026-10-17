@@ -1,93 +1,95 @@
-# Later for Chatwoot
+# Later для Chatwoot
 
-Later is an embedded Chatwoot dashboard app for scheduling text replies. For the current conversation, agents can create, edit, reschedule, and delete pending replies and inspect messages that exhausted their delivery retries.
+Later — встраиваемое приложение для отложенной отправки текстовых ответов в Chatwoot. Сотрудники могут создавать, редактировать, переносить и удалять отложенные сообщения в текущем диалоге, а также просматривать сообщения, которые не удалось отправить.
 
-Later follows the same integration and visual approach as [Crate](https://github.com/stoparmy/crate): it runs on the Chatwoot origin, receives the active conversation through the dashboard-app `postMessage` contract, and authenticates browser requests with the current Chatwoot dashboard session.
+Интеграция и оформление устроены так же, как в [Crate](https://github.com/stoparmy/crate): приложение работает на том же домене, что и Chatwoot, получает контекст текущего диалога через `postMessage` и использует действующую сессию сотрудника для авторизации запросов из браузера.
 
-## Behavior
+## Возможности
 
-- Text replies only.
-- Times are entered in the agent's browser timezone and stored as UTC.
-- Any agent who can access a conversation can manage its pending or failed messages.
-- Each message can be cancelled automatically if the contact replies after it was scheduled.
-- Each message can be cancelled automatically if the conversation is not `open` at send time.
-- Sent and cancelled rows are retained for audit but are not shown in the dashboard.
-- Transient Chatwoot failures use bounded exponential retries; exhausted or permanent failures appear in the dashboard and can be rescheduled.
-- Later adds `content_attributes.later_message_id` to sent Chatwoot messages. A worker reclaiming an interrupted job checks this marker before sending, reducing duplicate delivery after an ambiguous HTTP failure.
+- Только текстовые ответы.
+- Время задаётся в часовом поясе браузера сотрудника и хранится в UTC.
+- Управлять отложенными сообщениями и сообщениями с ошибками может любой сотрудник с доступом к диалогу.
+- Отправку можно автоматически отменить, если собеседник ответит после создания задания.
+- Отправку можно автоматически отменить, если к моменту отправки диалог не находится в статусе `open`.
+- Отправленные и отменённые задания сохраняются для аудита, но не отображаются в интерфейсе.
+- При временных сбоях Chatwoot отправка повторяется с экспоненциально растущей задержкой и ограничением числа попыток. Сообщения с постоянными ошибками или исчерпанными попытками остаются в интерфейсе — их можно запланировать заново.
+- В отправляемые сообщения добавляется метка `content_attributes.later_message_id`. При восстановлении прерванного задания обработчик проверяет эту метку перед повторной отправкой, снижая риск дублирования после неоднозначного сбоя HTTP-запроса.
 
-Chatwoot does not currently expose native scheduled messages. At the due time, Later creates a normal outgoing message through Chatwoot's application API using the configured service-account token. Chatwoot attributes the reply to that service account; Later retains the scheduling and editing agent names in its own database.
+Отправкой по расписанию управляет Later: в назначенное время приложение создаёт обычное исходящее сообщение через API Chatwoot с токеном выделенной служебной учётной записи. В Chatwoot отправителем отображается эта учётная запись, а имена сотрудников, создавших и изменивших задание, хранятся в отдельной базе приложения.
 
-## Architecture
+## Архитектура
 
-The published artifact is one Docker image with two process roles:
+Публикуется один Docker-образ для двух типов процессов:
 
-- `later`: Express API, compiled React dashboard, authenticated CRUD endpoints, and database migrations.
-- `worker`: PostgreSQL-backed scheduler using atomic `FOR UPDATE SKIP LOCKED` claims and crash-safe leases.
+- `later` — API на Express, собранный интерфейс на React, защищённые операции с сообщениями и миграции базы данных.
+- `worker` — обработчик расписания на PostgreSQL с атомарным захватом заданий через `FOR UPDATE SKIP LOCKED` и временными блокировками, позволяющими восстановить обработку после сбоя.
 
-Later uses its own PostgreSQL database. Do not point `DATABASE_URL` at the Chatwoot application database.
+Приложение использует собственную базу PostgreSQL. Не указывайте базу Chatwoot в `DATABASE_URL`.
 
-## Configuration
+## Настройка
 
-Copy `.env.example` to `.env` and set:
+Скопируйте `.env.example` в `.env` и задайте параметры:
 
-- `CHATWOOT_BASE_URL`: public Chatwoot origin, for example `https://helpdesk.example.org`.
-- `CHATWOOT_APP_TOKEN`: API access token for the dedicated Later service account.
-- `DATABASE_URL`: PostgreSQL connection URL when running outside the included Compose stack.
-- `PORT`: web process port, default `3000`.
-- `LATER_PUBLIC_BASE_PATH`: build-time dashboard path, such as `/later/`; defaults to relative assets.
-- `LATER_WORKER_POLL_INTERVAL_MS`: idle polling interval, default `5000`.
-- `LATER_WORKER_LEASE_MS`: interrupted-job lease, default `60000`.
-- `LATER_WORKER_MAX_ATTEMPTS`: maximum automatic attempts, default `5`.
-- `LATER_CHATWOOT_REQUEST_TIMEOUT_MS`: timeout for each Chatwoot API request, default `15000`.
+- `CHATWOOT_BASE_URL` — базовый адрес Chatwoot, например `https://helpdesk.example.org`.
+- `CHATWOOT_APP_TOKEN` — API-токен выделенной служебной учётной записи.
+- `DATABASE_URL` — адрес подключения к PostgreSQL при запуске вне комплектного стека Compose.
+- `PORT` — порт веб-процесса, по умолчанию `3000`.
+- `LATER_PUBLIC_BASE_PATH` — путь приложения, задаваемый при сборке, например `/later/`. По умолчанию используются относительные пути к ресурсам.
+- `LATER_WORKER_POLL_INTERVAL_MS` — интервал проверки очереди при отсутствии заданий, по умолчанию `5000` мс.
+- `LATER_WORKER_LEASE_MS` — срок временной блокировки задания, по умолчанию `60000` мс.
+- `LATER_WORKER_MAX_ATTEMPTS` — максимальное число автоматических попыток отправки, по умолчанию `5`.
+- `LATER_CHATWOOT_REQUEST_TIMEOUT_MS` — тайм-аут запроса к API Chatwoot, по умолчанию `15000` мс.
 
-Set a strong `POSTGRES_PASSWORD` for the included database. Compose requires it;
-use URL-safe characters (for example, a generated hexadecimal password) because
-the value is also used in the database URL.
+Для комплектной базы данных обязательно задайте надёжный `POSTGRES_PASSWORD`.
+Используйте символы, безопасные для URL, например случайный шестнадцатеричный пароль:
+это значение также подставляется в адрес подключения к базе.
 
-## Run with Docker Compose
+## Запуск через Docker Compose
 
-Published images are available at `ghcr.io/stoparmy/later` for AMD64 and ARM64:
+Готовые образы для AMD64 и ARM64 публикуются в `ghcr.io/stoparmy/later`:
 
 ```bash
 docker pull ghcr.io/stoparmy/later:latest
 ```
 
-Use a fixed version tag for repeatable deployments. The same image runs the web
-app with its default command and the scheduler with `node dist/worker/index.js`.
-Both processes need the configuration below and access to the same database.
-The included Compose file builds the image from source:
+Для воспроизводимого развёртывания указывайте тег конкретной версии. Один и тот же
+образ запускает веб-приложение командой по умолчанию, а обработчик расписания —
+командой `node dist/worker/index.js`. Оба процесса должны иметь необходимые параметры
+окружения и доступ к одной базе данных.
+
+Комплектный файл Compose собирает образ из исходного кода:
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-
-The web health endpoint checks database readiness:
+Перед запуском заполните `.env`. Проверка состояния веб-приложения также проверяет доступность базы данных:
 
 ```text
 GET /api/health
 ```
 
-## Install as a Chatwoot dashboard app
+## Подключение к Chatwoot
 
-1. Proxy Later under a same-origin path such as `/later/`. An nginx example is available in `examples/nginx/chatwoot-later.conf`.
-2. Build with `LATER_PUBLIC_BASE_PATH=/later/` if you want an absolute asset base; the default relative build also supports a fixed slug.
-3. In Chatwoot, create a dashboard app whose URL is `https://helpdesk.example.org/later/`.
-4. Open a conversation and select Later from the dashboard apps panel.
+1. Настройте обратный прокси, чтобы приложение было доступно на том же домене, что и Chatwoot, например по пути `/later/`. Пример nginx: `examples/nginx/chatwoot-later.conf`.
+2. Если нужны абсолютные пути к ресурсам, задайте `LATER_PUBLIC_BASE_PATH=/later/` при сборке. Относительные пути по умолчанию также подходят для размещения по фиксированному пути.
+3. Создайте в Chatwoot приложение панели диалога с адресом `https://helpdesk.example.org/later/`.
+4. Откройте диалог и выберите приложение на панели интеграций.
 
-The `/later` to `/later/` redirect is important so browser-relative assets and API paths resolve beneath the selected slug.
+Перенаправление с `/later` на `/later/` обязательно: завершающий слеш нужен для правильного разрешения относительных путей к ресурсам и API.
 
-## Development with Chatwoot
+## Разработка с Chatwoot
 
-Use a separate local Chatwoot instance and integration agent. Proxy both services
-under the same HTTPS origin using the nginx example above, register the dashboard
-app, and supply the integration token through an ignored environment file.
-Keep credentials, TLS keys, database volumes, browser sessions, and captured
-conversation data outside the repository. The dashboard requires a real Chatwoot
-session; it has no standalone authentication bypass or sample-message store.
+Используйте отдельный локальный экземпляр Chatwoot и служебную учётную запись.
+Разместите оба сервиса на одном HTTPS-домене через обратный прокси, зарегистрируйте
+приложение и передайте токен интеграции через файл окружения, исключённый из Git.
 
-## Local verification
+Не добавляйте в репозиторий учётные данные, TLS-ключи, содержимое баз данных,
+браузерные сессии и выгрузки переписки. Для работы приложения нужна действующая
+сессия Chatwoot; обхода авторизации и встроенного хранилища тестовых сообщений нет.
+
+## Локальная проверка
 
 ```bash
 npm install
@@ -100,22 +102,26 @@ docker compose config --quiet
 docker build -t later:local .
 ```
 
-## Releases
+## Релизы
 
-Before the first push, run `npm run check:publication`. It checks the Git publication
-file set for credentials, private workstation configuration, and captured data.
-It also checks for values from local environment files without printing them.
-This is a precaution, not a substitute for reviewing the files before publishing.
-See [SECURITY.md](SECURITY.md) for deployment and disclosure guidance.
+Перед первой отправкой в GitHub выполните `npm run check:publication`. Проверка
+ищет учётные данные, частную конфигурацию рабочей машины и выгрузки данных среди
+файлов, предназначенных для публикации. Она также ищет значения из локальных
+файлов окружения, не выводя их в журнал. Это дополнительная мера предосторожности,
+а не замена ручной проверке.
 
-The GitHub Actions workflow uses semantic-release and publishes `ghcr.io/<owner>/<repository>` for `linux/amd64` and `linux/arm64`.
+Рекомендации по безопасному развёртыванию и сообщению об уязвимостях:
+[SECURITY.md](SECURITY.md).
 
-- `fix:` creates a patch release.
-- `feat:` creates a minor release.
-- `BREAKING CHANGE:` or `!` creates a major release.
-- `main` publishes semver tags and `latest`.
-- `beta` publishes prerelease semver tags and `beta` without changing `latest`.
+GitHub Actions использует semantic-release и публикует образ
+`ghcr.io/<owner>/<repository>` для `linux/amd64` и `linux/arm64`.
 
-## License
+- `fix:` — исправление с повышением patch-версии.
+- `feat:` — новая возможность с повышением minor-версии.
+- `BREAKING CHANGE:` или `!` — несовместимое изменение с повышением major-версии.
+- Ветка `main` публикует теги версий и `latest`.
+- Ветка `beta` публикует предварительные версии и тег `beta`, не изменяя `latest`.
+
+## Лицензия
 
 MIT
