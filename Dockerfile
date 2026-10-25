@@ -1,5 +1,5 @@
 # Build dashboard
-FROM node:24-bookworm AS web-build
+FROM node:24.22.1-bookworm AS web-build
 ARG LATER_PUBLIC_BASE_PATH=./
 ENV VITE_PUBLIC_BASE_PATH=${LATER_PUBLIC_BASE_PATH}
 WORKDIR /app/web
@@ -9,7 +9,7 @@ COPY web/ ./
 RUN npm run build
 
 # Build server and worker
-FROM node:24-bookworm AS server-build
+FROM node:24.22.1-bookworm AS server-build
 WORKDIR /app
 COPY server/package*.json ./
 RUN npm ci
@@ -17,12 +17,12 @@ COPY server/ ./
 RUN npm run build
 
 # Production dependencies
-FROM node:24-bookworm AS server-production
+FROM node:24.22.1-bookworm AS server-production
 WORKDIR /app
 COPY server/package*.json ./
 RUN npm ci --omit=dev
 
-FROM node:24-bookworm-slim
+FROM node:24.22.1-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=server-build /app/dist ./dist
